@@ -213,6 +213,12 @@ void AutoMenuManager::onMenuFrame()
     this->actStartedGame = false;
   }
 
+  if (exiting)
+  {
+    BroodwarImpl.pressKey(VK_ESCAPE); // spam Cancel/Exit
+    return;
+  }
+
   // Iterate through the menus
   switch (menu)
   {
@@ -229,8 +235,7 @@ void AutoMenuManager::onMenuFrame()
     break;
   case BW::GLUE_EX_CAMPAIGN:  // Campaign selection menu
   case BW::GLUE_CAMPAIGN:
-    // Choose "Custom"
-    pressDialogKey(BW::FindDialogGlobal("RaceSelection")->findIndex(10));
+    pressDialogKey(BW::FindDialogGlobal("RaceSelection")->findIndex(10)); // Play Custom
     break;
   case BW::GLUE_CREATE:       // Game creation menu
   case BW::GLUE_CREATE_MULTI:
@@ -453,8 +458,15 @@ void AutoMenuManager::onMenuFrame()
   case BW::GLUE_SCORE_T_VICTORY:
   case BW::GLUE_SCORE_P_DEFEAT:
   case BW::GLUE_SCORE_P_VICTORY:
+    if (this->autoMenuRestartGame == "EXIT")
+    {
+      exiting = true;
+      BroodwarImpl.pressKey(VK_RETURN); // Cancel
+      break;
+    }
+
     if (this->autoMenuRestartGame != "" && this->autoMenuRestartGame != "OFF")
-      pressDialogKey(BW::FindDialogGlobal("End")->findIndex(7));
+      BroodwarImpl.pressKey(VK_RETURN); // Cancel
     break;
   case BW::GLUE_READY_T:  // Mission Briefing
   case BW::GLUE_READY_Z:
