@@ -26,22 +26,24 @@ namespace DRIP
   const int PacketType_GamePacket = 3;
 
   //------------------------------------------------------------------------------------------------------------------------------------
-  void rebind()
+  void DirectIP::rebind()
   {
-    int targetPort = atoi(getLocalPortString());
-    if(session.getBoundPort() == targetPort)
-      return;
+    int targetPort = settingsDialog.localPort();
     try
     {
-      session.release();
-      session.init();
-      session.setBlockingMode(false);
-      session.bind(targetPort);
-      setStatusString("network ready");
+      if (session.getBoundPort() != targetPort)
+      {
+        session.release();
+        session.init();
+        session.setBlockingMode(false);
+        session.bind(targetPort);
+      }
+      settingsDialog.setStatus("network ready");
     }
     catch(...)
     {
-      setStatusString("local port fail");
+      settingsDialog.show();
+      settingsDialog.setStatus("local port fail");
     }
   }
   void DirectIP::processIncomingPackets()
@@ -59,7 +61,8 @@ namespace DRIP
           if(session.getState() == WSAECONNRESET)
           {
 //            DropMessage(1, "target host not reachable");
-            setStatusString("host IP not reachable");
+            settingsDialog.show();
+            settingsDialog.setStatus("host not reachable");
             continue;
           }
           if(session.getState() == WSAEWOULDBLOCK)
@@ -109,14 +112,24 @@ namespace DRIP
   //------------------------------------------------------------------------------------------------------------------------------------
   void DirectIP::initialize()
   {
-    showSettingsDialog();
+    char* v;
+    settingsDialog.setHostIP(   (v=std::getenv("DIRECT_IP_HOST_IP"))    ? v : "127.0.0.1");
+    settingsDialog.setHostPort( (v=std::getenv("DIRECT_IP_HOST_PORT"))  ? std::stoi(v) : 6112);
+    settingsDialog.setLocalPort((v=std::getenv("DIRECT_IP_LOCAL_PORT")) ? std::stoi(v) : 6112);
+
+    if (!std::getenv("DIRECT_IP_HOST_IP") ||
+        !std::getenv("DIRECT_IP_HOST_PORT") || 
+        !std::getenv("DIRECT_IP_LOCAL_PORT"))
+    {
+      settingsDialog.show();
+    }
 
     // bind to port
     rebind();
   }
   void DirectIP::destroy()
   {
-    hideSettingsDialog();
+    settingsDialog.hide();
     session.release();
   }
   void DirectIP::requestAds()
@@ -132,8 +145,8 @@ namespace DRIP
 
     UDPAddr host;
     host.sin_family = AF_INET;
-    host.sin_addr.s_addr = inet_addr(getHostIPString());
-    host.sin_port = htons(atoi(getHostPortString()));
+    host.sin_addr.s_addr = inet_addr(settingsDialog.hostIP().c_str());
+    host.sin_port = htons(settingsDialog.hostPort());
     session.sendPacket(host, sendBuffer.getFrameUpto(ping_server));
   }
   void DirectIP::sendAsyn(const UDPAddr& him, Util::MemoryFrame packet)

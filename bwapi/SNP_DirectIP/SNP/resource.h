@@ -7,7 +7,6 @@
 #define IDC_EDITIP                      1001
 #define IDC_EDITPORT                    1003
 #define IDC_EDITLPORT                   1004
-#define IDC_BUTTON1                     1005
 #define IDC_STATUS                      1006
 
 // Next default values for new objects

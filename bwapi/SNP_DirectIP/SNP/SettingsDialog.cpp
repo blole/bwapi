@@ -1,104 +1,123 @@
 #include "SettingsDialog.h"
 #include <windows.h>
-
 #include "resource.h"
-
-INT_PTR CALLBACK Sessings( HWND, UINT, WPARAM, LPARAM );
-DWORD WINAPI dlgThread(LPVOID lpParameter);
-
-volatile bool dlgActive = false;
-volatile bool wantExit = false;
-
-HANDLE dlgThreadHandle = NULL;
-HWND hDlg;
 
 extern HINSTANCE hInstance;
 
-DWORD WINAPI dlgThread(LPVOID lpParameter)
+namespace DRIP
 {
-  DialogBox(hInstance, MAKEINTRESOURCE(IDD_SETTINGS), NULL, Sessings);
-  return 0;
-}
-
-void showSettingsDialog()
-{
-  wantExit = false;
-  dlgActive = true;
-  dlgThreadHandle = CreateThread(NULL, NULL, dlgThread, NULL, NULL, NULL);
-}
-
-void hideSettingsDialog()
-{
-  if(dlgActive)
+  void SettingsDialog::show()
   {
-    wantExit = true;
-    SendMessage(hDlg, WM_CLOSE, 0, 0);
-    WaitForSingleObject(dlgThreadHandle, 10000);
-    dlgActive = false;
-    dlgThreadHandle = NULL;
+    if (!threadHandle)
+      threadHandle = CreateThread(NULL, NULL, dialogThread, this, NULL, NULL);
   }
-}
-
-const char* getHostIPString()
-{
-  static char buffer[32];
-  if(hDlg)
+  void SettingsDialog::hide()
   {
-    GetDlgItemTextA(hDlg, IDC_EDITIP, buffer, 32);
+    //possible race condition since the handles are reset from another thread, but unlikely
+    if (windowHandle)
+      SendMessage(windowHandle, WM_CLOSE, 0, 0);
+    if (threadHandle)
+      WaitForSingleObject(threadHandle, 10000);
   }
-  return buffer;
-}
 
-const char* getHostPortString()
-{
-  static char buffer[32];
-  if(hDlg)
+
+  std::string SettingsDialog::hostIP() const
   {
-    GetDlgItemTextA(hDlg, IDC_EDITPORT, buffer, 32);
+    if (windowHandle)
+      return getItemText(IDC_EDITIP);
+    else
+      return hostIP_;
   }
-  return buffer;
-}
 
-const char* getLocalPortString()
-{
-  static char buffer[32];
-  if(hDlg)
+  int SettingsDialog::hostPort() const
   {
-    GetDlgItemTextA(hDlg, IDC_EDITLPORT, buffer, 32);
+    if (windowHandle)
+      return stoi(getItemText(IDC_EDITPORT));
+    else
+      return hostPort_;
   }
-  return buffer;
-}
 
-void setStatusString(const char *statusText)
-{
-  if(hDlg)
+  int SettingsDialog::localPort() const
   {
-    SetDlgItemTextA(hDlg, IDC_STATUS, statusText);
+    if (windowHandle)
+      return stoi(getItemText(IDC_EDITLPORT));
+    else
+      return localPort_;
   }
-}
 
-
-INT_PTR CALLBACK Sessings( HWND _hDlg, UINT message, WPARAM wParam, LPARAM lParam )
-{
-  hDlg = _hDlg;
-  switch( message )
+  void SettingsDialog::setHostIP(const std::string& ip)
   {
+    hostIP_ = ip;
+    setItemText(IDC_EDITIP, ip);
+  }
+
+  void SettingsDialog::setHostPort(int port)
+  {
+    hostPort_ = port;
+    setItemText(IDC_EDITPORT, std::to_string(port));
+  }
+
+  void SettingsDialog::setLocalPort(int port)
+  {
+    localPort_ = port;
+    setItemText(IDC_EDITLPORT, std::to_string(port));
+  }
+
+  void SettingsDialog::setStatus(const std::string& status)
+  {
+    setItemText(IDC_STATUS, status);
+  }
+
+
+
+  std::string SettingsDialog::getItemText(int id) const
+  {
+    char buffer[32] = { 0 };
+    if (windowHandle)
+      GetDlgItemTextA(windowHandle, id, buffer, 32);
+    return std::string(buffer);
+  }
+
+  void SettingsDialog::setItemText(int id, const std::string& value)
+  {
+    if (windowHandle)
+      SetDlgItemTextA(windowHandle, id, value.c_str());
+  }
+
+
+
+  DWORD WINAPI SettingsDialog::dialogThread(LPVOID lParam)
+  {
+    SettingsDialog* settingsDialog = (SettingsDialog*)lParam;
+    DialogBoxParam(hInstance, MAKEINTRESOURCE(IDD_SETTINGS), NULL, dialogEventHandler, (LONG)settingsDialog);
+    settingsDialog->threadHandle = nullptr;
+    return 0;
+  }
+
+  INT_PTR CALLBACK SettingsDialog::dialogEventHandler(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam)
+  {
+    static SettingsDialog* settingsDialog = nullptr;
+
+    switch (message)
+    {
     case WM_INITDIALOG:
-      SetDlgItemTextA(_hDlg, IDC_EDITIP,    "127.0.0.1");
-      SetDlgItemTextA(_hDlg, IDC_EDITPORT,  "6112");
-      SetDlgItemTextA(_hDlg, IDC_EDITLPORT, "6112");
+      settingsDialog = (SettingsDialog*)lParam;
+      settingsDialog->windowHandle = windowHandle;
+      settingsDialog->setHostIP(settingsDialog->hostIP_);
+      settingsDialog->setHostPort(settingsDialog->hostPort_);
+      settingsDialog->setLocalPort(settingsDialog->localPort_);
       return TRUE;
 
-    case WM_COMMAND:
-      if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) 
-      {
-        EndDialog(hDlg, LOWORD(wParam));
-        return TRUE;
-      }
-      break;
-
     case WM_CLOSE:
-      EndDialog(hDlg, 0);
-  }
+      settingsDialog->hostIP_    = settingsDialog->hostIP();
+      settingsDialog->hostPort_  = settingsDialog->hostPort();
+      settingsDialog->localPort_ = settingsDialog->localPort();
+      settingsDialog->windowHandle = nullptr;
+      settingsDialog = nullptr;
+      EndDialog(windowHandle, 0);
+      break;
+    }
+
     return FALSE;
+  }
 }
